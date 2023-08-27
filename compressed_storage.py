@@ -4,6 +4,13 @@ Created on Mon May  1 11:21:45 2023
 
 @author: rhl
 """
+"Tank parameters:"
+T_in_max = 80; # [deg C]
+T_in_rated = 15; # [deg C]
+P_in_rated = 345; # [bar]
+cap_rated = 18; # [kg]
+
+"Determination of H2 inlet temperature based on length of pipe:"
 
 %% TANK DATA
 
