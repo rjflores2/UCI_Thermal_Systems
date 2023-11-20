@@ -1,58 +1,21 @@
 import os
 from math import exp, floor, log, sqrt, tanh  
 
-def calc_Cmin(mh, mc, Cph, Cpc):
-    '''
-    mh : float
-        Mass flow rate of hot stream, [kg/s]
-    mc : float
-        Mass flow rate of cold stream, [kg/s]
-    Cph : float
-        Averaged heat capacity of hot stream, [J/kg/K]
-    Cpc : float
-        Averaged heat capacity of cold stream, [J/kg/K]
-    Cmin : float
-        The heat capacity rate of the smaller fluid, [W/K]
-    '''
-   Ch = mh*Cph
-   Cc = mc*Cpc
-   return min(Ch, Cc)
-def calc_Cmax(mh, mc, Cph, Cpc):
-    '''
-    mh : float
-        Mass flow rate of hot stream, [kg/s]
-    mc : float
-        Mass flow rate of cold stream, [kg/s]
-    Cph : float
-        Averaged heat capacity of hot stream, [J/kg/K]
-    Cpc : float
-        Averaged heat capacity of cold stream, [J/kg/K]
-    Cmax : float
-        The heat capacity rate of the larger fluid, [W/K]
-    '''
-    Ch = mh*Cph
-    Cc = mc*Cpc
-    return max(Ch, Cc)
-def calc_Cr(mh, mc, Cph, Cpc):
-    '''
-    mh : float
-        Mass flow rate of hot stream, [kg/s]
-    mc : float
-        Mass flow rate of cold stream, [kg/s]
-    Cph : float
-        Averaged heat capacity of hot stream, [J/kg/K]
-    Cpc : float
-        Averaged heat capacity of cold stream, [J/kg/K]
-    Cr : float
-        The heat capacity rate ratio, of the smaller fluid to the larger
-        fluid, [W/K]
-    '''
-    Ch = mh*Cph
-    Cc = mc*Cpc
-    Cmin = min(Ch, Cc)
-    Cmax = max(Ch, Cc)
-    return Cmin/Cmax
-def effectiveness_from_NTU(NTU, Cr, subtype='counterflow', n_shell_tube=None):
+# Define parameters and constants
+H2_den = CP.PropsSI('D','T', streamsIn[0].T,'P',streamsIn[0].P,'H2'); #print('H2 density = ', H2_den) # [kg/m^3] density at normal operating conditions to determine mass flow rate
+H2_mm = CP.PropsSI('molarmass', 'H2') # [kg/mol]
+H2O_mm = CP.PropsSI('molarmass', 'H2O') # [kg/mol]
+mdot_hot = streams_in[0].N*H2_mm # [kg/s] hot stream mass flow rate
+mdot_cold = streams_in[1].N*H2O_mm # [kg/s] cold stream mass flow rate
+Cp_hot = Cp_mass('H2', streams_in[0].P, streams_in[0].T) # [J/kg/K] constant pressure specifc heat 
+Cp_cold = Cp_mass('H2O_L', streams_in[1].P, streams_in[1].T) # [J/kg/K] constant pressure specifc heat 
+C_hot = Cp_hot*mdot_hot # [W/K] heat capacity rate
+C_cold = Cp_cold*mdot_cold # [W/K] heat capacity rate
+C_min = min(C_hot,C_cold) # [W/K] heat capacity rate of "smaller" fluid
+C_max = max(C_hot,C_cold) # [W/K] heat capacity rate "larger" fluid
+Cr = C_min/C_max # The heat capacity rate ratio, of the smaller fluid to the larger
+
+def effectiveness_from_NTU(NTU, Cr, subtype):
     '''
     Supports Counterflow, parallel flow,boiler and condenser
     Equation table on P.725 of the book
@@ -64,7 +27,7 @@ def effectiveness_from_NTU(NTU, Cr, subtype='counterflow', n_shell_tube=None):
         fluid, [-]
     subtype : str, optional
         The subtype of exchanger; one of 'counterflow', 'parallel', 'boiler', 'condenser'
-    effectiveness : float
+    effectiveness (epsilon) : float
         The thermal effectiveness of the heat exchanger, [-]
     '''
     if Cr > 1:
@@ -72,17 +35,19 @@ def effectiveness_from_NTU(NTU, Cr, subtype='counterflow', n_shell_tube=None):
 
     if subtype == 'counterflow':
         if Cr < 1:
-            return (1. - exp(-NTU*(1. - Cr)))/(1. - Cr*exp(-NTU*(1. - Cr)))
+            epsilon = (1 - exp(-NTU*(1 - Cr)))/(1 - Cr*exp(-NTU*(1 - Cr))) # eq 11.29a
         elif Cr == 1:
-            return NTU/(1. + NTU)
+            epsilon = NTU/(1. + NTU) # eq 11.29a
     elif subtype == 'parallel':
-            return (1. - exp(-NTU*(1. + Cr)))/(1. + Cr)
+            epsilon = (1 - exp(-NTU*(1 + Cr)))/(1 + Cr) # eq 11.28a
     elif subtype == 'boiler' or subtype == 'condenser':
-        return  1. - exp(-NTU)
+        epsilon = 1 - exp(-NTU) # eq 11.35a
     else:
         raise ValueError('Input heat exchanger type not recognized')
         
-def NTU_from_effectiveness(effectiveness, Cr, subtype='counterflow', n_shell_tube=None):
+    return epsilon
+        
+def NTU_from_effectiveness(effectiveness, Cr, subtype):
     '''
     Supports Counterflow, parallel flow,boiler and condenser
     Equation table on P.725 of the book
@@ -102,9 +67,9 @@ def NTU_from_effectiveness(effectiveness, Cr, subtype='counterflow', n_shell_tub
 
     if subtype == 'counterflow':
         if Cr < 1:
-            return 1./(Cr - 1.)*log((effectiveness - 1.)/(effectiveness*Cr - 1.))
+            return 1./(Cr - 1.)*log((effectiveness - 1.)/(effectiveness*Cr - 1.)) # eq 11.29b
         elif Cr == 1:
-            return effectiveness/(1. - effectiveness)
+            return effectiveness/(1. - effectiveness) # eq 11.29b
     elif subtype == 'parallel':
         if effectiveness*(1. + Cr) > 1:
             raise ValueError('The specified effectiveness is not physically '
@@ -116,17 +81,17 @@ def NTU_from_effectiveness(effectiveness, Cr, subtype='counterflow', n_shell_tub
     else:
         raise ValueError('Input heat exchanger type not recognized')
 
-def UA_from_NTU(NTU, Cmin):
+def UA_from_NTU(NTU, C_min):
     '''
     UA = NTU C_{min}
     NTU : float
         Thermal Number of Transfer Units [-]
-    Cmin : float
+    C_min : float
         The heat capacity rate of the smaller fluid, [W/K]
     UA : float
         Combined area-heat transfer coefficient term, [W/K]
     '''
-    return NTU*Cmin
+    return NTU*C_min
         
 def effectiveness_NTU_method(mh, mc, Cph, Cpc, subtype='counterflow', Thi=None,
                              Tho=None, Tci=None, Tco=None, UA=None,
@@ -143,7 +108,7 @@ def effectiveness_NTU_method(mh, mc, Cph, Cpc, subtype='counterflow', Thi=None,
         Averaged heat capacity of cold stream [J/kg/K]
     subtype : str optional
         The subtype of exchanger; one of 'counterflow', 'parallel', 'crossflow'
-        'crossflow, mixed Cmin', 'crossflow, mixed Cmax', 'boiler', 'condenser',
+        'crossflow, mixed C_min', 'crossflow, mixed C_max', 'boiler', 'condenser',
         'S&T', or 'nS&T' where n is the number of shell and tube exchangers in
         a row
     Thi : float optional
@@ -163,8 +128,8 @@ def effectiveness_NTU_method(mh, mc, Cph, Cpc, subtype='counterflow', Thi=None,
         * Q : Heat exchanged in the heat exchanger [W]
         * UA : Combined area-heat transfer coefficient term [W/K]
         * Cr : The heat capacity rate ratio of the smaller fluid to the larger fluid [W/K]
-        * Cmin : The heat capacity rate of the smaller fluid [W/K]
-        * Cmax : The heat capacity rate of the larger fluid [W/K]
+        * C_min : The heat capacity rate of the smaller fluid [W/K]
+        * C_max : The heat capacity rate of the larger fluid [W/K]
         * effectiveness : The thermal effectiveness of the heat exchanger [-]
         * NTU : Thermal Number of Transfer Units [-]
         * Thi : Inlet temperature of hot fluid [K]
@@ -172,13 +137,13 @@ def effectiveness_NTU_method(mh, mc, Cph, Cpc, subtype='counterflow', Thi=None,
         * Tci : Inlet temperature of cold fluid [K]
         * Tco : Outlet temperature of cold fluid [K]
     '''
-    Cmin = calc_Cmin(mh=mh, mc=mc, Cph=Cph, Cpc=Cpc)
-    Cmax = calc_Cmax(mh=mh, mc=mc, Cph=Cph, Cpc=Cpc)
+    C_min = calc_C_min(mh=mh, mc=mc, Cph=Cph, Cpc=Cpc)
+    C_max = calc_C_max(mh=mh, mc=mc, Cph=Cph, Cpc=Cpc)
     Cr = calc_Cr(mh=mh, mc=mc, Cph=Cph, Cpc=Cpc)
     Cc = mc*Cpc
     Ch = mh*Cph
     if UA is not None:
-        NTU = NTU_from_UA(UA=UA, Cmin=Cmin)
+        NTU = NTU_from_UA(UA=UA, C_min=C_min)
         effectiveness = eff = effectiveness_from_NTU(NTU=NTU, Cr=Cr, n_shell_tube=n_shell_tube, subtype=subtype)
 
         possible_inputs = [(Tci, Thi), (Tci, Tho), (Tco, Thi), (Tco, Tho)]
@@ -186,13 +151,13 @@ def effectiveness_NTU_method(mh, mc, Cph, Cpc, subtype='counterflow', Thi=None,
             raise ValueError('One set of (Tci, Thi), (Tci, Tho), (Tco, Thi), or (Tco, Tho) are required along with UA.')
 
         if Thi is not None and Tci is not None:
-            Q = eff*Cmin*(Thi - Tci)
+            Q = eff*C_min*(Thi - Tci)
         elif Tho is not None and Tco is not None:
-            Q = eff*Cmin*Cc*Ch*(Tco - Tho)/(eff*Cmin*(Cc+Ch) - Ch*Cc)
+            Q = eff*C_min*Cc*Ch*(Tco - Tho)/(eff*C_min*(Cc+Ch) - Ch*Cc)
         elif Thi is not None and Tco is not None:
-            Q = Cmin*Cc*eff*(Tco-Thi)/(eff*Cmin - Cc)
+            Q = C_min*Cc*eff*(Tco-Thi)/(eff*C_min - Cc)
         elif Tho is not None and Tci is not None:
-            Q = Cmin*Ch*eff*(Tci-Tho)/(eff*Cmin - Ch)
+            Q = C_min*Ch*eff*(Tci-Tho)/(eff*C_min - Ch)
         if Tci is not None and Tco is None:
             Tco = Tci + Q/(Cc)
         else:
@@ -230,10 +195,10 @@ def effectiveness_NTU_method(mh, mc, Cph, Cpc, subtype='counterflow', Thi=None,
         else:
             raise ValueError('Three temperatures are required to be specified when solving for UA')
 
-        effectiveness = Q/Cmin/(Thi-Tci)
+        effectiveness = Q/C_min/(Thi-Tci)
         NTU = NTU_from_effectiveness(effectiveness, Cr, n_shell_tube=n_shell_tube, subtype=subtype)
-        UA = UA_from_NTU(NTU, Cmin)
-    return {'Q': Q, 'UA': UA, 'Cr':Cr, 'Cmin': Cmin, 'Cmax':Cmax,
+        UA = UA_from_NTU(NTU, C_min)
+    return {'Q': Q, 'UA': UA, 'Cr':Cr, 'C_min': C_min, 'C_max':C_max,
             'effectiveness': effectiveness, 'NTU': NTU, 'Thi': Thi, 'Tho': Tho,
             'Tci': Tci, 'Tco': Tco}
 
