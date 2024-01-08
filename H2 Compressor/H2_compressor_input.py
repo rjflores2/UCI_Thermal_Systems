@@ -6,11 +6,13 @@ Created on Fri Mar  3 13:09:59 2023
 """
 
 # Import directories, functions, toolboxes etc.
-import math; import numpy as np; from numpy import log as ln; import matplotlib.pyplot as plt; from math import pi,exp, floor, log, sqrt, tanh;
+import math; import numpy as np; from numpy import log as ln; import matplotlib.pyplot as plt
+from math import pi,exp, floor, log, sqrt, tanh;
 from scipy.integrate import odeint; from scipy.optimize import fsolve;
 import CoolProp.CoolProp as CP; import cantera as CT;
 import time; import xlsxwriter
 import os,sys;
+import pandas as pd
 
 #---------------------------------------
 # Defining class, attribute, and instances for H2_compressor. Add new instances for new streams. 
@@ -88,8 +90,12 @@ chosen_parameter_name = available_parameters['1']
 chosen_parameter_start = 300; chosen_parameter_end = 330; chosen_parameter_step = 5;  # change the start value, end value, and step value based on chosen inlet parameter (units are based on chosen parameter)
 chosen_parameter_range = np.arange(chosen_parameter_start, chosen_parameter_end+chosen_parameter_step, chosen_parameter_step); #print(chosen_parameter_range) # inlet parameter range 
 chosen_parameter_index_start = 0
-chosen_parameter_index_stop = 1
+chosen_parameter_index_stop = -1
 chosen_parameter_range = chosen_parameter_range[chosen_parameter_index_start:chosen_parameter_index_stop]; #print(temp_in_range)
+
+# Define loop parameters
+component_loops = True # True loops through chosen components more than once, False does not loop through chosen components
+loop_parameter = 'Stage'
 
 # Define ambient conditions to be used in all components
 T_STD = 293.15; P_STD = 101325; # [K],[Pa] standard operating conditions 
@@ -141,7 +147,7 @@ def component_inputs(first_index, component):
         s_40 = Stream(s_40, c, T_in_p, P_in_p, N_in_p, x_KOH, x_H2O_l_p, x_H2O_v, x_H2_p, x_O2, x_N2) 
         
         s_41 = 41 #  must match stream inlet tags in Stream Tag Table of Operational Guide
-        N_in_cw = 0.5 # [mol/s] cooling water inlet molar flowrate
+        N_in_cw = 0.012 # [mol/s] cooling water inlet molar flowrate
         x_H2_cw = 0; x_H2O_l_cw = 1
         P_in_cw = 275790 # [Pa] (40 psi delivery pressure from AEZ and compressor chiller)
         T_in_cw = 288 # [K] (60 deg F setpoint of AEZ and compressor chiller)
@@ -170,14 +176,18 @@ def component_inputs(first_index, component):
         streams_in = [s_42, s_44]; 
         
     Inputs = {
-         'Stages':s,
+         'Stage':s,
          'Type': t,
          'Properties': props,
          'Inlet streams': streams_in}
      
     return Inputs
 
-all_component_inputs = component_inputs(components_list[cs_index_start], components_list[cs_index_start])
+if len(components_list) > 1:
+    all_component_inputs = component_inputs(components_list[cs_index_start], components_list[cs_index_start])
+else:
+    all_component_inputs = component_inputs(components_list[0], components_list[0])
+compressor_main_props = all_component_inputs['Properties'][0]
 streams_in = all_component_inputs['Inlet streams']; #print(streams_in) 
 streams_in_start = streams_in # defined so that inlet conditions don't change as current density increases (only for starting component)
 input_array = class2array((streams_in[0]), (streams_in))
@@ -193,4 +203,6 @@ else:
                           
 #---------------------------------------
 # Defining properties to be collected from chosen components
-T_list_stack = []; 
+parameter_work = []
+parameter_heat_head = []
+parameter_HX_heat = []
