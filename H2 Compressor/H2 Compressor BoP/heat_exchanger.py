@@ -189,10 +189,10 @@ def effectiveness_NTU_method(mdot_hot, mdot_cold, Cp_hot, Cp_cold, subtype, Thi=
 H2_den = CP.PropsSI('D','T', streams_in[0].T,'P',streams_in[0].P,'H2'); #print('H2 density = ', H2_den) # [kg/m^3] density at normal operating conditions to determine mass flow rate
 H2_mm = CP.PropsSI('molarmass', 'H2') # [kg/mol]
 H2O_mm = CP.PropsSI('molarmass', 'H2O') # [kg/mol]
-mdot_hot = streams_in[0].N*H2_mm; print('Hot mass flow rate = ', mdot_hot, '[kg/s]') # [kg/s] hot stream mass flow rate
-mdot_cold = streams_in[1].N*H2O_mm; print('Cold mass flow rate = ', mdot_cold, '[kg/s]') # [kg/s] cold stream mass flow rate
-Cp_hot = Cp_mass('H2', streams_in[0].P, streams_in[0].T); print('Hot stream Cp = ', Cp_hot, '[J/kg/K]') # [J/kg/K] constant pressure specifc heat 
-Cp_cold = Cp_mass('H2O_L', streams_in[1].P, streams_in[1].T); print('Cold stream Cp = ', Cp_cold, '[J/kg/K]') # [J/kg/K] constant pressure specifc heat 
+mdot_hot = streams_in[0].N*H2_mm; #print('Hot mass flow rate = ', mdot_hot, '[kg/s]') # [kg/s] hot stream mass flow rate
+mdot_cold = streams_in[1].N*H2O_mm; #print('Cold mass flow rate = ', mdot_cold, '[kg/s]') # [kg/s] cold stream mass flow rate
+Cp_hot = Cp_mass('H2', streams_in[0].P, streams_in[0].T); #print('Hot stream Cp = ', Cp_hot, '[J/kg/K]') # [J/kg/K] constant pressure specifc heat 
+Cp_cold = Cp_mass('H2O_L', streams_in[1].P, streams_in[1].T); #print('Cold stream Cp = ', Cp_cold, '[J/kg/K]') # [J/kg/K] constant pressure specifc heat 
 C_hot = Cp_hot*mdot_hot # [W/K] heat capacity rate
 C_cold = Cp_cold*mdot_cold # [W/K] heat capacity rate
 C_min = min(C_hot,C_cold) # [W/K] heat capacity rate of "smaller" fluid
@@ -200,8 +200,7 @@ C_max = max(C_hot,C_cold) # [W/K] heat capacity rate "larger" fluid
 Cr = C_min/C_max # The heat capacity rate ratio, of the smaller fluid to the larger
 
 HX = effectiveness_NTU_method(mdot_hot, mdot_cold, Cp_hot, Cp_cold, subtype = compressor_main_props['HX type'], Tci= streams_in[1].T, Thi = streams_in[0].T, Tco = 330)
-print('H2 outlet temperature = ', HX['Tho'], '[K]')
-print('H2 inlet temperature = ', HX['Thi'], '[K]')
+
 streams_out[0].T = HX['Tho']
 streams_out[0].P = streams_in[0].P
 streams_out[0].N = streams_in[0].N
